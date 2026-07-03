@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -108,11 +109,14 @@ let allData = JSON.parse(localStorage.getItem('wtt_data') || '{}');
 let categories = JSON.parse(localStorage.getItem('wtt_categories') || JSON.stringify(DEFAULT_CATEGORIES));
 let selectedDate = new Date().toISOString().slice(0,10);
 
-// Two independent, simultaneous timers
+// Primary timer (single) + multiple simultaneous background timers
 let timers = {
-  primary: { running: false, start: null, category: categories[0], interval: null },
-  background: { running: false, start: null, category: categories[0], interval: null }
+  primary: { running: false, start: null, category: categories[0], interval: null }
 };
+let bgCounter = 1;
+let backgroundTimers = [
+  { id: bgCounter, running: false, start: null, category: categories[0], interval: null, label: '背景 1' }
+];
 let summaryView = 'combined'; // combined | primary | background
 
 function saveAll(){ localStorage.setItem('wtt_data', JSON.stringify(allData)); }
@@ -153,6 +157,7 @@ function handleManualAdd(){
 }
 
 function startTimer(key){
+  // primary timer only
   const t = timers[key];
   const select = document.getElementById(key+'-cat');
   t.category = select.value;
@@ -175,6 +180,46 @@ function updateTimerDisplay(key){
   if (!el) return;
   const t = timers[key];
   const elapsed = Math.floor((Date.now()-t.start)/1000);
+  const h=Math.floor(elapsed/3600), m=Math.floor((elapsed%3600)/60), s=elapsed%60;
+  el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// --- Background timers (multiple, simultaneous) ---
+function addBackgroundTimer(){
+  bgCounter++;
+  backgroundTimers.push({ id: bgCounter, running: false, start: null, category: categories[0], interval: null, label: '背景 '+bgCounter });
+  renderLog();
+}
+function removeBackgroundTimer(id){
+  const bt = backgroundTimers.find(b => b.id === id);
+  if (bt && bt.running) clearInterval(bt.interval);
+  backgroundTimers = backgroundTimers.filter(b => b.id !== id);
+  if (backgroundTimers.length === 0) addBackgroundTimer();
+  else renderLog();
+}
+function startBgTimer(id){
+  const bt = backgroundTimers.find(b => b.id === id);
+  const select = document.getElementById('bg-cat-'+id);
+  bt.category = select.value;
+  bt.running = true;
+  bt.start = Date.now();
+  bt.interval = setInterval(() => updateBgDisplay(id), 1000);
+  renderLog();
+}
+function stopBgTimer(id){
+  const bt = backgroundTimers.find(b => b.id === id);
+  const elapsed = Math.floor((Date.now()-bt.start)/1000);
+  const mins = Math.round(elapsed/60);
+  clearInterval(bt.interval);
+  bt.running = false; bt.start = null;
+  if (mins > 0) addEntry(bt.category, mins, bt.label, 'background');
+  else renderLog();
+}
+function updateBgDisplay(id){
+  const el = document.getElementById('bg-display-'+id);
+  if (!el) return;
+  const bt = backgroundTimers.find(b => b.id === id);
+  const elapsed = Math.floor((Date.now()-bt.start)/1000);
   const h=Math.floor(elapsed/3600), m=Math.floor((elapsed%3600)/60), s=elapsed%60;
   el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
@@ -205,7 +250,7 @@ function timerCard(key, label, badgeClass, badgeText, startBtnClass, startLabel)
       <div class="row">
         <select id="${key}-cat" ${t.running?'disabled':''}>${categoryOptions(t.category)}</select>
         ${t.running
-          ? `<div class="timer-display ${key==='background'?'bg':''}" id="${key}-display">00:00:00</div><button class="stop" onclick="stopTimer('${key}')">停止</button>`
+          ? `<div class="timer-display" id="${key}-display">00:00:00</div><button class="stop" onclick="stopTimer('${key}')">停止</button>`
           : `<button class="${startBtnClass}" onclick="startTimer('${key}')">${startLabel}</button>`}
       </div>
     </div>`;
@@ -224,7 +269,22 @@ function renderLog(){
     </div>
 
     ${timerCard('primary', '主要工作計時器', 'badge-primary', 'PRIMARY', 'primary', '▶ 開始計時')}
-    ${timerCard('background', '背景執行計時器', 'badge-bg', 'BACKGROUND', 'bgstart', '▶ 開始計時')}
+
+    ${backgroundTimers.map(bt => `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+          <div class="card-label" style="margin:0;">${esc(bt.label)} <span class="badge badge-bg">BACKGROUND</span></div>
+          ${backgroundTimers.length > 1 && !bt.running ? `<button class="del-btn" onclick="removeBackgroundTimer(${bt.id})" style="font-size:18px;">×</button>` : ''}
+        </div>
+        <div class="row">
+          <select id="bg-cat-${bt.id}" ${bt.running?'disabled':''}>${categoryOptions(bt.category)}</select>
+          ${bt.running
+            ? `<div class="timer-display bg" id="bg-display-${bt.id}">00:00:00</div><button class="stop" onclick="stopBgTimer(${bt.id})">停止</button>`
+            : `<button class="bgstart" onclick="startBgTimer(${bt.id})">▶ 開始計時</button>`}
+        </div>
+      </div>`).join('')}
+
+    <button class="secondary" onclick="addBackgroundTimer()" style="width:100%;margin-bottom:16px;">+ 新增背景計時器</button>
 
     <div class="card">
       <div class="card-label">手動新增</div>
@@ -289,7 +349,7 @@ function renderLog(){
   `;
   document.getElementById('log-tab').innerHTML = html;
   if (timers.primary.running) updateTimerDisplay('primary');
-  if (timers.background.running) updateTimerDisplay('background');
+  backgroundTimers.forEach(bt => { if (bt.running) updateBgDisplay(bt.id); });
 }
 
 function renderSummary(){
