@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>工作時間追蹤</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="時間追蹤">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%236366f1'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='white'%3E⏱%3C/text%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+    background: #0f0f13; color: #e8e6f0;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+    -webkit-user-select: none; user-select: none;
+  }
+  input, select { -webkit-user-select: text; user-select: text; }
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-bottom: 1px solid #2a2a3e; padding: 20px 20px 0;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header-inner { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .logo { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg,#6366f1,#8b5cf6);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink:0; }
+  .title { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
+  .subtitle { font-size: 12px; color: #6b6b8a; }
+  .tabs { display: flex; }
+  .tab-btn { flex:none; padding: 10px 20px; border: none; background: none; cursor: pointer;
+    color: #6b6b8a; border-bottom: 2px solid transparent; font-weight: 400; font-size: 14px;
+    font-family: inherit; }
+  .tab-btn.active { color: #a5b4fc; border-bottom-color: #6366f1; font-weight: 600; }
+  .container { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
+  .card { background: #1a1a2e; border-radius: 16px; border: 1px solid #2a2a42; padding: 18px; margin-bottom: 16px; }
+  .card.bg-card { border-color: #3a2e4a; }
+  .card-label { font-size: 12px; color: #6b6b8a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; display:flex; align-items:center; gap:6px; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 700; letter-spacing: 0.03em; }
+  .badge-primary { background: #1e3a5f; color: #93c5fd; }
+  .badge-bg { background: #3a2e5f; color: #c4b5fd; }
+  select, input[type=text], input[type=number], input[type=date] {
+    background: #13131f; border: 1px solid #2e2e46; border-radius: 8px; color: #e8e6f0;
+    padding: 10px 12px; font-size: 15px; font-family: inherit; width: 100%;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: 1 1 auto; }
+  button.primary { background: linear-gradient(135deg,#6366f1,#8b5cf6); border: none; border-radius: 8px;
+    color: #fff; padding: 11px 18px; cursor: pointer; font-weight: 600; font-size: 15px; font-family: inherit; flex: none; }
+  button.bgstart { background: linear-gradient(135deg,#8b5cf6,#c084fc); border: none; border-radius: 8px;
+    color: #fff; padding: 11px 18px; cursor: pointer; font-weight: 600; font-size: 15px; font-family: inherit; flex: none; }
+  button.stop { background: #ef4444; border: none; border-radius: 8px; color: #fff; padding: 11px 18px;
+    cursor: pointer; font-weight: 600; font-size: 15px; font-family: inherit; flex: none; }
+  button.secondary { background: #1e3a5f; border: 1px solid #2563eb; border-radius: 8px; color: #93c5fd;
+    padding: 10px 16px; cursor: pointer; font-weight: 600; font-size: 14px; font-family: inherit; flex: none; }
+  .timer-display { font-family: monospace; font-size: 24px; font-weight: 700; color: #a5b4fc; flex: none; min-width: 100px; }
+  .timer-display.bg { color: #c4b5fd; }
+  .entry { display: flex; align-items: center; gap: 10px; background: #13131f; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .entry-main { flex: 1; min-width: 0; }
+  .entry-cat { font-weight: 600; font-size: 14px; }
+  .entry-note { color: #6b6b8a; font-size: 13px; margin-left: 8px; }
+  .entry-type { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 6px; font-weight: 700; vertical-align: middle; }
+  .entry-mins { color: #a5b4fc; font-weight: 700; font-size: 14px; min-width: 56px; text-align: right; flex-shrink:0; }
+  .entry-time { color: #3a3a54; font-size: 12px; min-width: 42px; flex-shrink:0; }
+  .del-btn { background: none; border: none; color: #3a3a54; cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1; flex-shrink:0; }
+  .empty { text-align: center; color: #3a3a54; padding: 24px 0; font-size: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: #13131f; border-radius: 20px;
+    padding: 6px 12px; margin: 3px 4px 3px 0; }
+  .chip-x { background: none; border: none; color: #6b6b8a; cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
+  .bar-bg { background: #13131f; border-radius: 4px; height: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .day-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1e1e30; }
+  .big-total { font-size: 28px; font-weight: 700; color: #a5b4fc; }
+  .seg-toggle { display: flex; background: #13131f; border-radius: 8px; padding: 3px; gap: 3px; margin-bottom: 16px; }
+  .seg-btn { flex: 1; padding: 8px; border: none; background: none; border-radius: 6px; color: #6b6b8a;
+    font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .seg-btn.active { background: #2a2a42; color: #e8e6f0; }
+  h1,h2,h3,p { margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="logo">⏱</div>
+    <div>
+      <div class="title">工作時間追蹤</div>
+      <div class="subtitle">記錄每日時間分配</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="log" onclick="switchTab('log')">📝 記錄</button>
+    <button class="tab-btn" data-tab="summary" onclick="switchTab('summary')">📊 統整</button>
+  </div>
+</div>
+
+<div class="container">
+  <div id="log-tab"></div>
+  <div id="summary-tab" style="display:none"></div>
+</div>
+
+<script>
+const CATEGORY_COLORS = ["#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6"];
+const DEFAULT_CATEGORIES = ["會議","開發","設計","文件撰寫","溝通協作","其他"];
+
+let allData = JSON.parse(localStorage.getItem('wtt_data') || '{}');
+let categories = JSON.parse(localStorage.getItem('wtt_categories') || JSON.stringify(DEFAULT_CATEGORIES));
+let selectedDate = new Date().toISOString().slice(0,10);
+
+// Two independent, simultaneous timers
+let timers = {
+  primary: { running: false, start: null, category: categories[0], interval: null },
+  background: { running: false, start: null, category: categories[0], interval: null }
+};
+let summaryView = 'combined'; // combined | primary | background
+
+function saveAll(){ localStorage.setItem('wtt_data', JSON.stringify(allData)); }
+function saveCats(){ localStorage.setItem('wtt_categories', JSON.stringify(categories)); }
+function fmt(mins){ const h=Math.floor(mins/60), m=mins%60; return h>0 ? `${h}h ${m}m` : `${m}m`; }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('log-tab').style.display = tab==='log' ? '' : 'none';
+  document.getElementById('summary-tab').style.display = tab==='summary' ? '' : 'none';
+  if (tab === 'summary') renderSummary();
+}
+
+function addEntry(category, minutes, note, type){
+  if (!minutes || minutes <= 0) return;
+  const entry = { id: Date.now()+Math.random(), category, minutes, note, type,
+    time: new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) };
+  if (!allData[selectedDate]) allData[selectedDate] = [];
+  allData[selectedDate].push(entry);
+  saveAll();
+  renderLog();
+}
+function deleteEntry(id){
+  allData[selectedDate] = (allData[selectedDate]||[]).filter(e => e.id !== id);
+  saveAll();
+  renderLog();
+}
+function handleManualAdd(){
+  const cat = document.getElementById('manual-cat').value;
+  const mins = parseInt(document.getElementById('manual-mins').value);
+  const note = document.getElementById('manual-note').value;
+  const type = document.getElementById('manual-type').value;
+  if (!mins || mins <= 0) return;
+  addEntry(cat, mins, note, type);
+  document.getElementById('manual-mins').value = '';
+  document.getElementById('manual-note').value = '';
+}
+
+function startTimer(key){
+  const t = timers[key];
+  const select = document.getElementById(key+'-cat');
+  t.category = select.value;
+  t.running = true;
+  t.start = Date.now();
+  t.interval = setInterval(() => updateTimerDisplay(key), 1000);
+  renderLog();
+}
+function stopTimer(key){
+  const t = timers[key];
+  const elapsed = Math.floor((Date.now()-t.start)/1000);
+  const mins = Math.round(elapsed/60);
+  clearInterval(t.interval);
+  t.running = false; t.start = null;
+  if (mins > 0) addEntry(t.category, mins, '', key);
+  else renderLog();
+}
+function updateTimerDisplay(key){
+  const el = document.getElementById(key+'-display');
+  if (!el) return;
+  const t = timers[key];
+  const elapsed = Math.floor((Date.now()-t.start)/1000);
+  const h=Math.floor(elapsed/3600), m=Math.floor((elapsed%3600)/60), s=elapsed%60;
+  el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function addCategory(){
+  const input = document.getElementById('new-cat-input');
+  const c = input.value.trim();
+  if (c && !categories.includes(c)){ categories.push(c); saveCats(); }
+  input.value = '';
+  renderLog();
+}
+function removeCategory(c){
+  categories = categories.filter(x => x !== c);
+  saveCats();
+  renderLog();
+}
+function changeDate(v){ selectedDate = v; renderLog(); }
+function setSummaryView(v){ summaryView = v; renderSummary(); }
+
+function categoryOptions(selected){
+  return categories.map(c => `<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('');
+}
+
+function timerCard(key, label, badgeClass, badgeText, startBtnClass, startLabel){
+  const t = timers[key];
+  return `
+    <div class="card">
+      <div class="card-label">${label} <span class="badge ${badgeClass}">${badgeText}</span></div>
+      <div class="row">
+        <select id="${key}-cat" ${t.running?'disabled':''}>${categoryOptions(t.category)}</select>
+        ${t.running
+          ? `<div class="timer-display ${key==='background'?'bg':''}" id="${key}-display">00:00:00</div><button class="stop" onclick="stopTimer('${key}')">停止</button>`
+          : `<button class="${startBtnClass}" onclick="startTimer('${key}')">${startLabel}</button>`}
+      </div>
+    </div>`;
+}
+
+function renderLog(){
+  const dayEntries = allData[selectedDate] || [];
+  const total = dayEntries.reduce((s,e)=>s+e.minutes,0);
+  const primaryTotal = dayEntries.filter(e=>e.type!=='background').reduce((s,e)=>s+e.minutes,0);
+  const bgTotal = dayEntries.filter(e=>e.type==='background').reduce((s,e)=>s+e.minutes,0);
+
+  const html = `
+    <div class="row" style="margin-bottom:16px;">
+      <label style="flex:none;font-size:13px;color:#9090b0;">日期</label>
+      <input type="date" value="${selectedDate}" onchange="changeDate(this.value)" style="flex:none;width:auto;">
+    </div>
+
+    ${timerCard('primary', '主要工作計時器', 'badge-primary', 'PRIMARY', 'primary', '▶ 開始計時')}
+    ${timerCard('background', '背景執行計時器', 'badge-bg', 'BACKGROUND', 'bgstart', '▶ 開始計時')}
+
+    <div class="card">
+      <div class="card-label">手動新增</div>
+      <div class="row">
+        <select id="manual-cat" style="flex:1 1 110px;">${categoryOptions(categories[0])}</select>
+        <input type="number" id="manual-mins" placeholder="分鐘" style="flex:none;width:80px;">
+        <select id="manual-type" style="flex:none;width:110px;">
+          <option value="primary">主要工作</option>
+          <option value="background">背景執行</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <input type="text" id="manual-note" placeholder="備註（選填）" style="flex:1;">
+        <button class="secondary" onclick="handleManualAdd()">+ 新增</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:14px;">
+        <div class="card-label" style="margin:0;">今日記錄</div>
+        <div style="font-size:13px;color:#a5b4fc;font-weight:600;text-align:right;">
+          合計 ${fmt(total)}<br>
+          <span style="font-size:11px;color:#6b6b8a;font-weight:400;">主要 ${fmt(primaryTotal)} · 背景 ${fmt(bgTotal)}</span>
+        </div>
+      </div>
+      ${dayEntries.length===0 ? `<div class="empty">還沒有記錄，開始計時或手動新增吧！</div>` :
+        [...dayEntries].reverse().map(e => {
+          const ci = categories.indexOf(e.category);
+          const color = CATEGORY_COLORS[(ci>=0?ci:0) % CATEGORY_COLORS.length];
+          const isBg = e.type === 'background';
+          return `<div class="entry">
+            <div class="dot" style="background:${color}"></div>
+            <div class="entry-main">
+              <span class="entry-cat">${esc(e.category)}</span>
+              <span class="entry-type" style="background:${isBg?'#3a2e5f':'#1e3a5f'};color:${isBg?'#c4b5fd':'#93c5fd'};">${isBg?'背景':'主要'}</span>
+              ${e.note?`<span class="entry-note">${esc(e.note)}</span>`:''}
+            </div>
+            <div class="entry-mins">${fmt(e.minutes)}</div>
+            <div class="entry-time">${e.time}</div>
+            <button class="del-btn" onclick="deleteEntry(${e.id})">×</button>
+          </div>`;
+        }).join('')}
+    </div>
+
+    <div class="card">
+      <div class="card-label">管理類別</div>
+      <div style="margin-bottom:12px;">
+        ${categories.map((c,i) => {
+          const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+          return `<span class="chip" style="border:1px solid ${color}33;">
+            <span class="dot" style="width:8px;height:8px;background:${color}"></span>
+            <span style="font-size:13px;">${esc(c)}</span>
+            <button class="chip-x" onclick="removeCategory('${esc(c).replace(/'/g,"\\'")}')">×</button>
+          </span>`;
+        }).join('')}
+      </div>
+      <div class="row">
+        <input type="text" id="new-cat-input" placeholder="新增類別名稱…">
+        <button class="secondary" onclick="addCategory()">新增</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('log-tab').innerHTML = html;
+  if (timers.primary.running) updateTimerDisplay('primary');
+  if (timers.background.running) updateTimerDisplay('background');
+}
+
+function renderSummary(){
+  const allEntries = Object.values(allData).flat();
+  const filtered = summaryView === 'combined' ? allEntries : allEntries.filter(e => (e.type||'primary') === summaryView);
+
+  const map = {};
+  filtered.forEach(e => { map[e.category] = (map[e.category]||0) + e.minutes; });
+  const summary = Object.entries(map).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);
+  const totalMins = summary.reduce((s,d)=>s+d.value,0);
+  const dates = Object.keys(allData).sort().reverse();
+
+  const overallPrimary = allEntries.filter(e=>(e.type||'primary')!=='background').reduce((s,e)=>s+e.minutes,0);
+  const overallBg = allEntries.filter(e=>e.type==='background').reduce((s,e)=>s+e.minutes,0);
+
+  let pieSVG = '';
+  if (summary.length > 0) {
+    let cumulative = 0;
+    const cx=100, cy=100, r=90;
+    const paths = summary.map((d,i) => {
+      const frac = d.value/totalMins;
+      const startAngle = cumulative * 2*Math.PI - Math.PI/2;
+      cumulative += frac;
+      const endAngle = cumulative * 2*Math.PI - Math.PI/2;
+      const x1 = cx + r*Math.cos(startAngle), y1 = cy + r*Math.sin(startAngle);
+      const x2 = cx + r*Math.cos(endAngle), y2 = cy + r*Math.sin(endAngle);
+      const large = frac > 0.5 ? 1 : 0;
+      const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+      if (summary.length === 1) {
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`;
+      }
+      return `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${color}"/>`;
+    }).join('');
+    pieSVG = `<svg viewBox="0 0 200 200" style="width:220px;height:220px;display:block;margin:0 auto;">${paths}</svg>`;
+  }
+
+  const html = `
+    <div class="card">
+      <div class="card-label">全部紀錄統整</div>
+      <div class="big-total">${fmt(totalMins)}</div>
+      <div style="font-size:13px;color:#6b6b8a;">共 ${dates.length} 天、${filtered.length} 筆記錄</div>
+      <div style="font-size:12px;color:#6b6b8a;margin-top:8px;">全部總計 — 主要 ${fmt(overallPrimary)} · 背景 ${fmt(overallBg)}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label" style="margin-bottom:0;">檢視範圍</div>
+      <div class="seg-toggle" style="margin-top:12px;margin-bottom:0;">
+        <button class="seg-btn ${summaryView==='combined'?'active':''}" onclick="setSummaryView('combined')">合併</button>
+        <button class="seg-btn ${summaryView==='primary'?'active':''}" onclick="setSummaryView('primary')">只看主要</button>
+        <button class="seg-btn ${summaryView==='background'?'active':''}" onclick="setSummaryView('background')">只看背景</button>
+      </div>
+    </div>
+
+    ${summary.length > 0 ? `
+    <div class="card">
+      <div class="card-label">時間分佈</div>
+      ${pieSVG}
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:14px;">
+        ${summary.map((d,i)=>`<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:#9090b0;">
+          <span class="dot" style="width:8px;height:8px;background:${CATEGORY_COLORS[i%CATEGORY_COLORS.length]}"></span>${esc(d.name)}
+        </span>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <div class="card">
+      <div class="card-label">各類別明細</div>
+      ${summary.length===0 ? `<div class="empty">還沒有任何記錄</div>` :
+        summary.map((d,i) => {
+          const pct = totalMins>0 ? (d.value/totalMins*100) : 0;
+          const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+          return `<div style="margin-bottom:14px;">
+            <div class="row" style="justify-content:space-between;margin-bottom:5px;">
+              <span style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;">
+                <span class="dot" style="background:${color}"></span>${esc(d.name)}
+              </span>
+              <span style="font-size:14px;color:#a5b4fc;font-weight:700;">${fmt(d.value)} <span style="color:#6b6b8a;font-weight:400;">(${pct.toFixed(1)}%)</span></span>
+            </div>
+            <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${color};"></div></div>
+          </div>`;
+        }).join('')}
+    </div>
+
+    ${dates.length>0 ? `
+    <div class="card">
+      <div class="card-label">每日紀錄</div>
+      ${dates.map(date => {
+        const entries = (allData[date]||[]).filter(e => summaryView==='combined' || (e.type||'primary')===summaryView);
+        if (entries.length===0) return '';
+        const total = entries.reduce((s,e)=>s+e.minutes,0);
+        return `<div class="day-row">
+          <div><div style="font-size:14px;font-weight:500;">${date}</div><div style="font-size:12px;color:#6b6b8a;">${entries.length} 筆記錄</div></div>
+          <div style="font-size:15px;font-weight:700;color:#a5b4fc;">${fmt(total)}</div>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+  `;
+  document.getElementById('summary-tab').innerHTML = html;
+}
+
+renderLog();
+</script>
+</body>
+</html>
