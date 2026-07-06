@@ -118,6 +118,7 @@ let backgroundTimers = [
   { id: bgCounter, running: false, start: null, category: categories[0], interval: null, label: '背景 1' }
 ];
 let summaryView = 'combined'; // combined | primary | background
+let summaryRange = 'week'; // all | week | month
 
 function saveAll(){ localStorage.setItem('wtt_data', JSON.stringify(allData)); }
 function saveCats(){ localStorage.setItem('wtt_categories', JSON.stringify(categories)); }
@@ -237,6 +238,31 @@ function removeCategory(c){
 }
 function changeDate(v){ selectedDate = v; renderLog(); }
 function setSummaryView(v){ summaryView = v; renderSummary(); }
+function setSummaryRange(v){ summaryRange = v; renderSummary(); }
+
+function getWeekRange(d){
+  // Monday-start week
+  const date = new Date(d+'T00:00:00');
+  const day = date.getDay(); // 0=Sun
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { start: monday.toISOString().slice(0,10), end: sunday.toISOString().slice(0,10) };
+}
+function getMonthRange(d){
+  const date = new Date(d+'T00:00:00');
+  const start = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0,10);
+  const end = new Date(date.getFullYear(), date.getMonth()+1, 0).toISOString().slice(0,10);
+  return { start, end };
+}
+function inRange(dateStr, range){
+  if (range === 'all') return true;
+  const today = new Date().toISOString().slice(0,10);
+  const { start, end } = range === 'week' ? getWeekRange(today) : getMonthRange(today);
+  return dateStr >= start && dateStr <= end;
+}
 
 function categoryOptions(selected){
   return categories.map(c => `<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('');
@@ -353,17 +379,47 @@ function renderLog(){
 }
 
 function renderSummary(){
-  const allEntries = Object.values(allData).flat();
+  const dateEntries = Object.entries(allData).filter(([date]) => inRange(date, summaryRange));
+  const allEntries = dateEntries.flatMap(([date, entries]) => entries.map(e => ({...e, _date: date})));
   const filtered = summaryView === 'combined' ? allEntries : allEntries.filter(e => (e.type||'primary') === summaryView);
 
   const map = {};
   filtered.forEach(e => { map[e.category] = (map[e.category]||0) + e.minutes; });
   const summary = Object.entries(map).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);
   const totalMins = summary.reduce((s,d)=>s+d.value,0);
-  const dates = Object.keys(allData).sort().reverse();
+  const dates = dateEntries.map(([date])=>date).sort().reverse();
 
   const overallPrimary = allEntries.filter(e=>(e.type||'primary')!=='background').reduce((s,e)=>s+e.minutes,0);
   const overallBg = allEntries.filter(e=>e.type==='background').reduce((s,e)=>s+e.minutes,0);
+
+  // Weekday breakdown (Mon-Sun) when viewing "week"
+  let weekdayHTML = '';
+  if (summaryRange === 'week') {
+    const today = new Date().toISOString().slice(0,10);
+    const { start } = getWeekRange(today);
+    const weekdayLabels = ['一','二','三','四','五','六','日'];
+    const startDate = new Date(start+'T00:00:00');
+    const weekdayTotals = weekdayLabels.map((label, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ds = d.toISOString().slice(0,10);
+      const dayMins = filtered.filter(e => e._date === ds).reduce((s,e)=>s+e.minutes,0);
+      return { label, date: ds, mins: dayMins };
+    });
+    const maxMins = Math.max(...weekdayTotals.map(w=>w.mins), 1);
+    weekdayHTML = `
+    <div class="card">
+      <div class="card-label">本週每日分布（週一至週日）</div>
+      <div style="display:flex;align-items:flex-end;gap:8px;height:120px;padding-top:10px;">
+        ${weekdayTotals.map(w => `
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
+            <div style="font-size:10px;color:#6b6b8a;margin-bottom:4px;">${w.mins>0?fmt(w.mins):''}</div>
+            <div style="width:100%;background:${w.date===today?'#6366f1':'#2e2e46'};border-radius:4px 4px 0 0;height:${Math.max((w.mins/maxMins)*80,w.mins>0?4:0)}px;"></div>
+            <div style="font-size:11px;color:${w.date===today?'#a5b4fc':'#6b6b8a'};margin-top:6px;font-weight:${w.date===today?700:400};">${w.label}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
 
   let pieSVG = '';
   if (summary.length > 0) {
@@ -386,16 +442,29 @@ function renderSummary(){
     pieSVG = `<svg viewBox="0 0 200 200" style="width:220px;height:220px;display:block;margin:0 auto;">${paths}</svg>`;
   }
 
+  const rangeLabel = summaryRange === 'all' ? '全部紀錄' : summaryRange === 'week' ? '本週統整' : '本月統整';
+
   const html = `
     <div class="card">
-      <div class="card-label">全部紀錄統整</div>
+      <div class="card-label">${rangeLabel}</div>
       <div class="big-total">${fmt(totalMins)}</div>
       <div style="font-size:13px;color:#6b6b8a;">共 ${dates.length} 天、${filtered.length} 筆記錄</div>
-      <div style="font-size:12px;color:#6b6b8a;margin-top:8px;">全部總計 — 主要 ${fmt(overallPrimary)} · 背景 ${fmt(overallBg)}</div>
+      <div style="font-size:12px;color:#6b6b8a;margin-top:8px;">總計 — 主要 ${fmt(overallPrimary)} · 背景 ${fmt(overallBg)}</div>
     </div>
 
     <div class="card">
-      <div class="card-label" style="margin-bottom:0;">檢視範圍</div>
+      <div class="card-label" style="margin-bottom:0;">時間範圍</div>
+      <div class="seg-toggle" style="margin-top:12px;margin-bottom:0;">
+        <button class="seg-btn ${summaryRange==='week'?'active':''}" onclick="setSummaryRange('week')">本週</button>
+        <button class="seg-btn ${summaryRange==='month'?'active':''}" onclick="setSummaryRange('month')">本月</button>
+        <button class="seg-btn ${summaryRange==='all'?'active':''}" onclick="setSummaryRange('all')">全部</button>
+      </div>
+    </div>
+
+    ${weekdayHTML}
+
+    <div class="card">
+      <div class="card-label" style="margin-bottom:0;">類別範圍</div>
       <div class="seg-toggle" style="margin-top:12px;margin-bottom:0;">
         <button class="seg-btn ${summaryView==='combined'?'active':''}" onclick="setSummaryView('combined')">合併</button>
         <button class="seg-btn ${summaryView==='primary'?'active':''}" onclick="setSummaryView('primary')">只看主要</button>
