@@ -87,7 +87,7 @@
     <div class="logo">⏱</div>
     <div>
       <div class="title">工作時間追蹤</div>
-      <div class="subtitle">記錄每日時間分配</div>
+      <div class="subtitle" id="sync-status">連線中…</div>
     </div>
   </div>
   <div class="tabs">
@@ -101,13 +101,93 @@
   <div id="summary-tab" style="display:none"></div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <script>
 const CATEGORY_COLORS = ["#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6"];
 const DEFAULT_CATEGORIES = ["會議","開發","設計","文件撰寫","溝通協作","其他"];
 
+const firebaseConfig = {
+  apiKey: "AIzaSyDdrvljpeCeXLmpgR2Eld6gr7BLU90Fy60",
+  authDomain: "work-capability.firebaseapp.com",
+  projectId: "work-capability",
+  storageBucket: "work-capability.firebasestorage.app",
+  messagingSenderId: "643930016049",
+  appId: "1:643930016049:web:fc2d5df5bd9b4d13ee0810",
+  measurementId: "G-BKSSPE51PY"
+};
+
 let allData = JSON.parse(localStorage.getItem('wtt_data') || '{}');
 let categories = JSON.parse(localStorage.getItem('wtt_categories') || JSON.stringify(DEFAULT_CATEGORIES));
 let selectedDate = new Date().toISOString().slice(0,10);
+
+// --- Firebase sync ---
+let db = null, docRef = null, firebaseReady = false, applyingRemote = false;
+let syncStatus = 'connecting'; // connecting | synced | offline | error
+
+function updateSyncStatusUI(){
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const map = {
+    connecting: '連線中…',
+    synced: '☁️ 已同步',
+    offline: '離線（本機資料）',
+    error: '⚠️ 連線失敗，使用本機資料'
+  };
+  el.textContent = map[syncStatus] || '';
+}
+
+function initFirebase(){
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    docRef = db.collection('worktime').doc('main');
+    docRef.onSnapshot(snap => {
+      firebaseReady = true;
+      if (snap.exists) {
+        const data = snap.data();
+        applyingRemote = true;
+        allData = data.allData || {};
+        categories = (data.categories && data.categories.length) ? data.categories : DEFAULT_CATEGORIES;
+        localStorage.setItem('wtt_data', JSON.stringify(allData));
+        localStorage.setItem('wtt_categories', JSON.stringify(categories));
+        syncStatus = 'synced';
+        updateSyncStatusUI();
+        rerenderActiveTab();
+        applyingRemote = false;
+      } else {
+        // first time: seed remote with whatever local/default data we have
+        pushToFirestore();
+      }
+    }, err => {
+      console.error('Firestore listen error:', err);
+      syncStatus = 'error';
+      updateSyncStatusUI();
+      rerenderActiveTab();
+    });
+  } catch (e) {
+    console.error('Firebase init failed:', e);
+    syncStatus = 'error';
+    updateSyncStatusUI();
+  }
+}
+
+function pushToFirestore(){
+  if (applyingRemote) return; // don't echo back a remote-triggered update
+  localStorage.setItem('wtt_data', JSON.stringify(allData));
+  localStorage.setItem('wtt_categories', JSON.stringify(categories));
+  if (!docRef) return;
+  docRef.set({ allData, categories }, { merge: false }).catch(err => {
+    console.error('Firestore write failed:', err);
+  });
+}
+
+function rerenderActiveTab(){
+  const logVisible = document.getElementById('log-tab') && document.getElementById('log-tab').style.display !== 'none';
+  renderLog();
+  if (!logVisible) renderSummary();
+}
 
 // Primary timer (single) + multiple simultaneous background timers
 let timers = {
@@ -120,8 +200,8 @@ let backgroundTimers = [
 let summaryView = 'combined'; // combined | primary | background
 let summaryRange = 'week'; // all | week | month
 
-function saveAll(){ localStorage.setItem('wtt_data', JSON.stringify(allData)); }
-function saveCats(){ localStorage.setItem('wtt_categories', JSON.stringify(categories)); }
+function saveAll(){ pushToFirestore(); }
+function saveCats(){ pushToFirestore(); }
 function fmt(mins){ const h=Math.floor(mins/60), m=mins%60; return h>0 ? `${h}h ${m}m` : `${m}m`; }
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
@@ -519,6 +599,7 @@ function renderSummary(){
 }
 
 renderLog();
+initFirebase();
 </script>
 </body>
 </html>
